@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import os
 import tempfile
 import imageio
@@ -61,7 +61,10 @@ if uploaded_files:
         st.caption("(Final preview shown below before export)")
 
     for i, fname in enumerate(ordered_filenames):
-        st.image(Image.open(file_dict[fname]), width=150, caption=f"{i+1}. {fname}")
+        try:
+            st.image(Image.open(file_dict[fname]), width=150, caption=f"{i+1}. {fname}")
+        except UnidentifiedImageError:
+            st.warning(f"Could not display preview for: {fname}")
 
     if st.button("Create Output"):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -71,7 +74,12 @@ if uploaded_files:
                 img_path = os.path.join(tmpdir, file.name)
                 with open(img_path, "wb") as f:
                     f.write(file.read())
-                img = Image.open(img_path).convert("RGB")
+                try:
+                    img = Image.open(img_path).convert("RGB")
+                except UnidentifiedImageError:
+                    st.error(f"Unable to open image: {file.name}. Please make sure it's a valid PNG or JPG.")
+                    continue
+
                 min_side = min(img.size)
                 img_cropped = img.crop(((img.width - min_side) // 2,
                                         (img.height - min_side) // 2,
@@ -86,6 +94,10 @@ if uploaded_files:
                     pos_y = img_cropped.size[1] - logo_size - watermark_margin
                     img_cropped.paste(logo, (pos_x, pos_y), logo)
                 images.append(img_cropped)
+
+            if not images:
+                st.error("No valid images were processed. Please upload at least one supported file.")
+                st.stop()
 
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             if output_format == "GIF":
